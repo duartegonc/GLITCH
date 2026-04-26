@@ -40,6 +40,12 @@ class NamesDatabase:
                 return "aws_instance"
             case "amazon.aws.iam_role", Tech.ansible:
                 return "aws_iam_role"
+            case "AWS::S3::Bucket", Tech.cloudformation:
+                return "aws_s3_bucket"
+            case "AWS::EC2::Instance", Tech.cloudformation:
+                return "aws_instance"
+            case "AWS::IAM::Role", Tech.cloudformation:
+                return "aws_iam_role"
             case _:
                 pass
         return type
@@ -78,8 +84,18 @@ class NamesDatabase:
                 return "action"
             case "name", "aws_s3_bucket", Tech.terraform:
                 return "bucket"
+            case "name", "aws_s3_bucket", Tech.cloudformation:
+                return "BucketName"
+            case "acl", "aws_s3_bucket", Tech.cloudformation:
+                return "AccessControl"
+            case "instance_type", "aws_instance", Tech.cloudformation:
+                return "InstanceType"
+            case "availability_zone", "aws_instance", Tech.cloudformation:
+                return "AvailabilityZone"
             case "assume_role_policy", "aws_iam_role", Tech.ansible:
                 return "assume_role_policy_document"
+            case "assume_role_policy", "aws_iam_role", Tech.cloudformation:
+                return "AssumeRolePolicyDocument"
             case _:
                 pass
         return name
@@ -171,6 +187,16 @@ class NamesDatabase:
                 return "enabled"
             case "bucket", "aws_s3_bucket", Tech.terraform:
                 return "name"
+            case "BucketName", "aws_s3_bucket", Tech.cloudformation:
+                return "name"
+            case "AccessControl", "aws_s3_bucket", Tech.cloudformation:
+                return "acl"
+            case "InstanceType", "aws_instance", Tech.cloudformation:
+                return "instance_type"
+            case "AvailabilityZone", "aws_instance", Tech.cloudformation:
+                return "availability_zone"
+            case "AssumeRolePolicyDocument", "aws_iam_role", Tech.cloudformation:
+                return "assume_role_policy"
             case "assume_role_policy_document", "aws_iam_role", Tech.ansible:
                 return "assume_role_policy"
             case _:
@@ -319,16 +345,16 @@ class NormalizationVisitor:
 
         # Since Terraform does not define a state, we add it manually
         # FIXME: Probably should be in a better place
-        if self.tech == Tech.terraform:
+        if self.tech in (Tech.terraform, Tech.cloudformation):
             element.attributes.insert(
                 0,
                 Attribute(
                     "state",
-                    # The element info should be unique
                     String("present", ElementInfo.get_sketched()),
                     ElementInfo.get_sketched(),
                 ),
             )
+
 
         for attr in element.attributes:
             attr.name, attr.value = NamesDatabase.get_attr_pair(
