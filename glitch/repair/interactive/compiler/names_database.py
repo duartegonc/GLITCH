@@ -146,6 +146,14 @@ class NamesDatabase:
                 return "started"
             case "stop", "state", "service", Tech.ansible:
                 return "stopped"
+            case "private", "acl", "aws_s3_bucket", Tech.cloudformation:
+                return "Private"
+            case "public-read", "acl", "aws_s3_bucket", Tech.cloudformation:
+                return "PublicRead"
+            case "public-read-write", "acl", "aws_s3_bucket", Tech.cloudformation:
+                return "PublicReadWrite"
+            case "authenticated-read", "acl", "aws_s3_bucket", Tech.cloudformation:
+                return "AuthenticatedRead"
             case "true", "enabled", "service", Tech.chef:
                 return ":enable"
             case "false", "enabled", "service", Tech.chef:

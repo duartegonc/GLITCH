@@ -466,16 +466,16 @@ class PatchSolver:
         temp = tempfile.NamedTemporaryFile(mode="w+")
         temp.write(smt2)
         temp.flush()
-        result = subprocess.run(
-            f"ulimit -v {self.memory_limit} && timeout {timeout} z3 -smt2 -model {temp.name}",
-            shell=True,
-            text=True,
-            capture_output=True,
-        )
-        if result.returncode == 124:
+        try:
+            result = subprocess.run(
+                f"z3 -smt2 -model {temp.name}",
+                shell=True,
+                text=True,
+                capture_output=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
             raise TimeoutError("Solver timed out")
-        elif result.returncode in [137, 139]:
-            raise MemoryError("Solver ran out of memory")
         temp.close()
         return result.stdout
 

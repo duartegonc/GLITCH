@@ -1,0 +1,16 @@
+{
+  "Records": [
+    {
+      "eventVersion": "1.08",
+      "eventSource": "s3.amazonaws.com",
+      "eventName": "PutBucketAcl",
+      "requestParameters": {
+        "bucketName": "my-drifted-bucket",
+        "x-amz-acl": "public-read"
+      },
+      "responseElements": null,
+      "eventTime": "2024-01-01T00:00:00Z",
+      "userAgent": "aws-cli/2.0.0"
+    }
+  ]
+}

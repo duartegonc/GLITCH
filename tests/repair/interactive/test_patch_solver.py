@@ -1,4 +1,5 @@
 import os
+import platform
 import pytest
 import unittest
 from tempfile import NamedTemporaryFile
@@ -297,6 +298,8 @@ class TestPatchSolverPuppetScript1(TestPatchSolver):
         ] = "<html><body><h1>Hello World</h1></body></html>"
 
         assert self.statement is not None
+        if platform.system() == "Darwin":
+            pytest.skip("ulimit -v not supported on macOS")
         solver = PatchSolver(self.statement, filesystem, memory_limit=1024 * 10)
         pytest.raises(MemoryError, solver.solve)
 
