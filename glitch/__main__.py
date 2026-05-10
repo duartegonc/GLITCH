@@ -349,16 +349,25 @@ def lint(
 
 @cli.command()
 @__common_params
-@click.argument("pid", type=str, required=True)
+@click.option(
+    "--cloudtrail-log",
+    type=click.Path(exists=True),
+    required=False,
+    help="Path to a CloudTrail JSON log to use as the ground-truth system state for repair.",
+)
+@click.argument("pid", type=str, required=False)
 def infrafix(
     path: str,
-    pid: str,
+    pid: Optional[str],
     tech: str,  # type: ignore
     type: UnitBlockType,
+    cloudtrail_log: Optional[str],
 ):
+    if not pid and not cloudtrail_log:
+        raise click.BadParameter("Either PID or --cloudtrail-log must be provided.")
     tech: Tech = __get_tech(tech)
     parser = __get_parser(tech)
-    run_infrafix(path, pid, parser, type, tech)
+    run_infrafix(path, pid or "", parser, type, tech, cloudtrail_log)
 
 
 @cli.command()

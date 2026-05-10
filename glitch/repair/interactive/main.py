@@ -2,7 +2,7 @@ import difflib
 import subprocess
 
 from copy import deepcopy
-from typing import List
+from typing import List, Optional
 from glitch.tech import Tech
 from glitch.parsers.parser import Parser
 from glitch.repr.inter import UnitBlock, UnitBlockType
@@ -18,30 +18,45 @@ from glitch.repair.interactive.tracer.transform import (
 from glitch.repair.interactive.solver import PatchSolver, PatchApplier
 from glitch.repair.interactive.compiler.names_database import NormalizationVisitor
 from glitch.repair.interactive.delta_p import PStatement
+from glitch.repair.interactive.cloudtrail.parser import CloudTrailParser
+from glitch.repair.interactive.cloudtrail.filter import CloudTrailFilter
+from glitch.repair.interactive.cloudtrail.transform import CloudTrailTransform
 
 
-def run_infrafix(path: str, pid: str, parser: Parser, type: UnitBlockType, tech: Tech):
+def run_infrafix(
+    path: str,
+    pid: str,
+    parser: Parser,
+    type: UnitBlockType,
+    tech: Tech,
+    cloudtrail_log: Optional[str] = None,
+):
     inter: UnitBlock | None = parser.parse_file(path, type)
     assert inter is not None
     NormalizationVisitor(tech).visit(inter)
     labeled_script = GLITCHLabeler.label(inter, tech)
     statement = DeltaPCompiler(labeled_script).compile()
 
-    syscalls = STrace(pid).run()
-    workdir = subprocess.check_output([f"pwdx {pid}"], shell=True)
-    workdir = workdir.decode("utf-8").strip().split(": ")[1]
-    sys_affected_paths = list(get_affected_paths(workdir, syscalls))
+    if cloudtrail_log is not None:
+        events = CloudTrailParser.parse_file(cloudtrail_log)
+        filtered = CloudTrailFilter.filter(events)
+        filesystem_state = CloudTrailTransform.build_system_state(filtered)
+    else:
+        syscalls = STrace(pid).run()
+        workdir = subprocess.check_output([f"pwdx {pid}"], shell=True)
+        workdir = workdir.decode("utf-8").strip().split(": ")[1]
+        sys_affected_paths = list(get_affected_paths(workdir, syscalls))
 
-    for i, path in enumerate(sys_affected_paths):
-        print(f"{i}: {path}")
-    indexes = input(
-        "Enter the indexes for the paths you wish to consider (separated by comma): "
-    )
-    path_indexes = list(map(int, indexes.split(",")))
-    affected_paths: List[str] = [sys_affected_paths[i] for i in path_indexes]
-    statement = PStatement.minimize(statement, list(set(affected_paths)))
+        for i, path in enumerate(sys_affected_paths):
+            print(f"{i}: {path}")
+        indexes = input(
+            "Enter the indexes for the paths you wish to consider (separated by comma): "
+        )
+        path_indexes = list(map(int, indexes.split(",")))
+        affected_paths: List[str] = [sys_affected_paths[i] for i in path_indexes]
+        statement = PStatement.minimize(statement, list(set(affected_paths)))
 
-    filesystem_state = get_file_system_state(set(affected_paths))
+        filesystem_state = get_file_system_state(set(affected_paths))
 
     solver = PatchSolver(statement, filesystem_state)
     patches = solver.solve()
