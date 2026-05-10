@@ -11,6 +11,7 @@ from glitch.parsers.puppet import PuppetParser
 from glitch.parsers.ansible import AnsibleParser
 from glitch.parsers.chef import ChefParser
 from glitch.parsers.terraform import TerraformParser
+from glitch.parsers.cloudformation import CloudFormationParser
 from glitch.parsers.parser import Parser
 from glitch.repair.interactive.compiler.labeler import GLITCHLabeler
 from glitch.repair.interactive.compiler.compiler import DeltaPCompiler
@@ -57,6 +58,8 @@ class TestPatchSolver(unittest.TestCase):
             return ChefParser()
         elif tech == Tech.terraform:
             return TerraformParser()
+        elif tech == Tech.cloudformation:
+            return CloudFormationParser()
         else:
             raise ValueError("Invalid tech")
 
@@ -2624,3 +2627,137 @@ resource "aws_instance" "stdby_vThunder" {
 }
 """
         self._patch_solver_apply(solver, model, filesystem, Tech.terraform, result)
+
+
+class TestPatchSolverCloudFormationScript1(TestPatchSolver):
+    def setUp(self):
+        super().setUp()
+        cf_script_1 = """
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  MyBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: my-cf-test-bucket
+"""
+        self._setup_patch_solver(
+            cf_script_1, UnitBlockType.script, Tech.cloudformation
+        )
+
+    def test_patch_solver_cf_s3_bucket(self) -> None:
+        filesystem = SystemState()
+        filesystem.state["aws_s3_bucket:different-cf-bucket"] = State()
+        filesystem.state["aws_s3_bucket:different-cf-bucket"].attrs[
+            "state"
+        ] = "present"
+        filesystem.state["aws_s3_bucket:different-cf-bucket"].attrs[
+            "acl"
+        ] = "PublicRead"
+
+        assert self.statement is not None
+        solver = PatchSolver(self.statement, filesystem)
+        models = solver.solve()
+        assert models is not None
+        assert len(models) == 1
+
+        model = models[0]
+        result = """
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  MyBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: different-cf-bucket
+      AccessControl: 'PublicRead'
+"""
+        self._patch_solver_apply(solver, model, filesystem, Tech.cloudformation, result)
+
+
+class TestPatchSolverCloudFormationScript2(TestPatchSolver):
+    def setUp(self):
+        super().setUp()
+        cf_script_2 = """
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  MyInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+"""
+        self._setup_patch_solver(
+            cf_script_2, UnitBlockType.script, Tech.cloudformation
+        )
+
+    def test_patch_solver_cf_ec2_instance(self) -> None:
+        filesystem = SystemState()
+        filesystem.state["aws_instance:MyInstance"] = State()
+        filesystem.state["aws_instance:MyInstance"].attrs["state"] = "present"
+        filesystem.state["aws_instance:MyInstance"].attrs[
+            "instance_type"
+        ] = "t2.micro"
+        filesystem.state["aws_instance:MyInstance"].attrs[
+            "availability_zone"
+        ] = "us-west-2a"
+
+        assert self.statement is not None
+        solver = PatchSolver(self.statement, filesystem)
+        models = solver.solve()
+        assert models is not None
+        assert len(models) == 1
+
+        model = models[0]
+        result = """
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  MyInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      AvailabilityZone: 'us-west-2a'
+"""
+        self._patch_solver_apply(solver, model, filesystem, Tech.cloudformation, result)
+
+
+class TestPatchSolverCloudFormationScript3(TestPatchSolver):
+    def setUp(self):
+        super().setUp()
+        cf_script_3 = """
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  MyBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: my-cf-test-bucket
+      AccessControl: Private
+"""
+        self._setup_patch_solver(
+            cf_script_3, UnitBlockType.script, Tech.cloudformation
+        )
+
+    def test_patch_solver_cf_s3_acl_drift(self) -> None:
+        filesystem = SystemState()
+        filesystem.state["aws_s3_bucket:my-cf-test-bucket"] = State()
+        filesystem.state["aws_s3_bucket:my-cf-test-bucket"].attrs[
+            "state"
+        ] = "present"
+        filesystem.state["aws_s3_bucket:my-cf-test-bucket"].attrs[
+            "acl"
+        ] = "PublicRead"
+
+        assert self.statement is not None
+        solver = PatchSolver(self.statement, filesystem)
+        models = solver.solve()
+        assert models is not None
+        assert len(models) == 1
+
+        model = models[0]
+        result = """
+AWSTemplateFormatVersion: "2010-09-09"
+Resources:
+  MyBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: my-cf-test-bucket
+      AccessControl: PublicRead
+"""
+        self._patch_solver_apply(solver, model, filesystem, Tech.cloudformation, result)
